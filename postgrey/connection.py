@@ -1,7 +1,5 @@
-import enum
 from urllib.parse import quote
 from asyncpg import connect as pg_connect
-from asyncpg import Record
 from postgrey.utils import raise_error
 from typing import Union
 
@@ -46,23 +44,24 @@ class Postgrey:
 
         return await self.connection.execute(query, *args, timeout=timeout)
 
-    async def create_table(self, table_name: str, **kwargs) -> str:
+    async def create_table(self, table_name: str, columns: dict) -> str:
         """Create a new table.
 
         Parameters:
             table_name (str): Table name.
-            **kwargs: column name - type and contraint.
+            columns: column name - type and contraint.
                 Example:
-                    id = "serial PRIMARY KEY", name = "text"
+                    {"id": "serial PRIMARY KEY", "name": "text"}
 
         Returns:
             str: Result.
         """
 
         raise_error(table_name, "table_name", str)
+        raise_error(columns, "columns", dict)
 
         formatted = [f"{key} {value}" for key,
-                     value in kwargs.items()]
+                     value in columns.items()]
 
         formatted = f"""
             CREATE TABLE {table_name} (
@@ -72,7 +71,7 @@ class Postgrey:
 
         return await self.execute(formatted)
 
-    async def insert(self, table_name: str, *args) -> str:
+    async def insert_data(self, table_name: str, *args) -> str:
         """Insert one/many item to the table.
 
         Parameters:
@@ -108,29 +107,30 @@ class Postgrey:
 
         return await self.execute(formatted, *keys)
 
-    async def find(self, table_name: str, **kwargs) -> list:
+    async def find_data(self, table_name: str, data: dict) -> list:
         """Find records from table.
 
         Parameters:
             table_name (str): Table name.
-            **kwargs: keys and operators.
+            data: Keys and operators.
                 Example:
-                    id=5 (Will find records that has id 5.)
-                    id=5, __id__=">" (Will find records that has id bigger that 5)
+                    {"id": 5} (Will find records that has id 5.)
+                    {"id": 5, "__id__": ">"} (Will find records that has id bigger that 5)
 
         Returns:
             list: One or more result.
         """
 
         raise_error(table_name, "table_name", str)
+        raise_error(data, "data", dict)
 
         keys, values, count = [], [], 1
 
-        for key in kwargs.keys():
+        for key in data.keys():
             if not key.startswith("__") and not key.endswith("__"):
                 keys.append(
-                    f"{key} {kwargs.get(f'__{key}__') or '='} ${count}")
-                values.append(kwargs.get(key))
+                    f"{key} {data.get(f'__{key}__') or '='} ${count}")
+                values.append(data.get(key))
                 count += 1
 
         formatted = f"""
@@ -139,6 +139,51 @@ class Postgrey:
         """
 
         return await self.connection.fetch(formatted, *values)
+
+    async def update_data(self, table_name: str, data: dict, new_data: dict) -> str:
+        """Update records from table.
+
+        Parameters:
+            table_name (str): Table name.
+            data: Keys and operators.
+                Example:
+                    {"id": 5} (Will find records that has id 5.)
+                    {"id": 5, "__id__": ">"} (Will find records that has id bigger that 5)
+            new_data: The new data.
+                Example:
+                    {"name": "user_111"}
+
+        Returns:
+            str: Result:
+        """
+
+        raise_error(table_name, "table_name", str)
+        raise_error(data, "data", dict)
+        raise_error(new_data, "new_data", dict)
+
+        new_keys, keys, values, count = [], [], [], 1
+
+        for key in new_data.keys():
+            new_keys.append(
+                f"{key} = ${count}")
+            values.append(new_data.get(key))
+            count += 1
+
+        for key in data.keys():
+            if not key.startswith("__") and not key.endswith("__"):
+                keys.append(
+                    f"{key} {data.get(f'__{key}__') or '='} ${count}")
+                values.append(data.get(key))
+                count += 1
+
+        formatted = f"""
+        UPDATE {table_name}
+            SET {', '.join(new_keys)}
+        WHERE {' AND '.join(keys)}
+        """
+
+        # print(formatted, values)
+        return await self.connection.execute(formatted, *values)
 
     async def drop_table(self, table_name: str) -> str:
         """Drop a table.

@@ -1,1 +1,1 @@
-from postgrey.classes import *
+from postgrey.connection import *
