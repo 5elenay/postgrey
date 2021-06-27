@@ -1,5 +1,7 @@
+import enum
 from urllib.parse import quote
 from asyncpg import connect as pg_connect
+from asyncpg import Record
 from postgrey.utils import raise_error
 from typing import Union
 
@@ -10,7 +12,7 @@ class Postgrey:
         self.connection_settings = kwargs or {}
 
     async def connect(self):
-        """Start the Connection.
+        """Start the connection.
 
         Parameters:
 
@@ -22,7 +24,7 @@ class Postgrey:
         return self.connection
 
     async def execute(self, query: Union[str, tuple], *args, timeout: Union[float, int] = None) -> str:
-        """Execute SQL.
+        """Execute SQL command.
 
         Parameters:
             query (str, tuple): SQL.
@@ -45,7 +47,7 @@ class Postgrey:
         return await self.connection.execute(query, *args, timeout=timeout)
 
     async def create_table(self, table_name: str, **kwargs) -> str:
-        """Create a New Table.
+        """Create a new table.
 
         Parameters:
             table_name (str): Table name.
@@ -81,9 +83,9 @@ class Postgrey:
             str: Result.
         """
 
-        keys, count, formatted = [], 1, ""
-
         raise_error(table_name, "table_name", str)
+
+        keys, count, formatted = [], 1, ""
 
         for arg in args:
             raise_error(arg, "arg", dict)
@@ -106,8 +108,53 @@ class Postgrey:
 
         return await self.execute(formatted, *keys)
 
+    async def find(self, table_name: str, **kwargs) -> list:
+        """Find records from table.
+
+        Parameters:
+            table_name (str): Table name.
+            **kwargs: keys and operators.
+                Example:
+                    id=5 (Will find records that has id 5.)
+                    id=5, __id__=">" (Will find records that has id bigger that 5)
+
+        Returns:
+            list: One or more result.
+        """
+
+        raise_error(table_name, "table_name", str)
+
+        keys, values, count = [], [], 1
+
+        for key in kwargs.keys():
+            if not key.startswith("__") and not key.endswith("__"):
+                keys.append(
+                    f"{key} {kwargs.get(f'__{key}__') or '='} ${count}")
+                values.append(kwargs.get(key))
+                count += 1
+
+        formatted = f"""
+        SELECT * FROM {table_name}
+            WHERE {' AND '.join(keys)}
+        """
+
+        return await self.connection.fetch(formatted, *values)
+
+    async def drop_table(self, table_name: str) -> str:
+        """Drop a table.
+
+        Parameters:
+            table_name (str): Table name.
+
+        Returns:
+            str: Result.
+        """
+
+        raise_error(table_name, "table_name", str)
+        return await self.execute(f"DROP TABLE {table_name}")
+
     async def disconnect(self, timeout: Union[float, int] = None):
-        """Close the Connection.
+        """Close the connection.
 
         Parameters:
             timeout (float, int): Timeout Value.
