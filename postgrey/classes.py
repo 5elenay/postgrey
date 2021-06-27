@@ -70,26 +70,41 @@ class Postgrey:
 
         return await self.execute(formatted)
 
-    async def insert_one(self, table_name: str, **kwargs) -> str:
-        """Insert new item to the table.
+    async def insert(self, table_name: str, *args) -> str:
+        """Insert one/many item to the table.
 
         Parameters:
             table_name (str): Table name.
-            **kwargs: key - value
+            *args: key - value dict
 
         Returns:
             str: Result.
         """
 
+        keys, count, formatted = [], 1, ""
+
         raise_error(table_name, "table_name", str)
 
+        for arg in args:
+            raise_error(arg, "arg", dict)
+            keys.extend(list(arg.values()))
+
+            formatted += "("
+            for _ in arg.values():
+                formatted += f"${count},"
+                count += 1
+
+            formatted = f"{formatted[:-1]}),"
+
+        formatted = formatted[:-1]
+
         formatted = f"""
-            INSERT INTO {table_name} VALUES (
-                {', '.join(f'${index + 1}' for index, _ in enumerate(kwargs.keys()))}
-            )
+            INSERT INTO {table_name}
+            VALUES
+                {formatted}
         """
 
-        return await self.execute(formatted, *kwargs.values())
+        return await self.execute(formatted, *keys)
 
     async def disconnect(self, timeout: Union[float, int] = None):
         """Close the Connection.
