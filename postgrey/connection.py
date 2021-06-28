@@ -1,6 +1,6 @@
 from urllib.parse import quote
 from asyncpg import connect as pg_connect
-from postgrey.utils import raise_error
+from postgrey.utils import raise_error, parse_data
 from typing import Union
 
 
@@ -49,7 +49,7 @@ class Postgrey:
 
         Parameters:
             table_name (str): Table name.
-            columns: column name - type and contraint.
+            columns (dict): column name - type and contraint.
                 Example:
                     {"id": "serial PRIMARY KEY", "name": "text"}
 
@@ -71,15 +71,15 @@ class Postgrey:
 
         return await self.execute(formatted)
 
-    async def insert_data(self, table_name: str, *args) -> str:
+    async def insert_data(self, table_name: str, *args) -> list:
         """Insert one/many item to the table.
 
         Parameters:
             table_name (str): Table name.
-            *args: key - value dict
+            *args (dict): key - value dict
 
         Returns:
-            str: Result.
+            list: One or more result.
         """
 
         raise_error(table_name, "table_name", str)
@@ -103,16 +103,17 @@ class Postgrey:
             INSERT INTO {table_name}
             VALUES
                 {formatted}
+            RETURNING *;
         """
 
-        return await self.execute(formatted, *keys)
+        return await self.connection.fetch(formatted, *keys)
 
-    async def find_data(self, table_name: str, data: dict) -> list:
+    async def find_data(self, table_name: str, data: dict, limit: Union[int, None] = None) -> list:
         """Find records from table.
 
         Parameters:
             table_name (str): Table name.
-            data: Keys and operators.
+            data (dict): Keys and operators.
                 Example:
                     {"id": 5} (Will find records that has id 5.)
                     {"id": 5, "__id__": ">"} (Will find records that has id bigger that 5)
@@ -123,38 +124,33 @@ class Postgrey:
 
         raise_error(table_name, "table_name", str)
         raise_error(data, "data", dict)
+        raise_error(limit, "limit", (int, type(None)))
 
-        keys, values, count = [], [], 1
-
-        for key in data.keys():
-            if not key.startswith("__") and not key.endswith("__"):
-                keys.append(
-                    f"{key} {data.get(f'__{key}__') or '='} ${count}")
-                values.append(data.get(key))
-                count += 1
+        keys, values, _ = parse_data(data)
 
         formatted = f"""
         SELECT * FROM {table_name}
             WHERE {' AND '.join(keys)}
+        {f'LIMIT {limit}' if limit is not None else ''}
         """
 
         return await self.connection.fetch(formatted, *values)
 
-    async def update_data(self, table_name: str, data: dict, new_data: dict) -> str:
+    async def update_data(self, table_name: str, data: dict, new_data: dict) -> list:
         """Update records from table.
 
         Parameters:
             table_name (str): Table name.
-            data: Keys and operators.
+            data (dict): Keys and operators.
                 Example:
                     {"id": 5} (Will find records that has id 5.)
                     {"id": 5, "__id__": ">"} (Will find records that has id bigger that 5)
-            new_data: The new data.
+            new_data (dict): The new data.
                 Example:
                     {"name": "user_111"}
 
         Returns:
-            str: Result:
+            list: One or more result.
         """
 
         raise_error(table_name, "table_name", str)
@@ -180,10 +176,37 @@ class Postgrey:
         UPDATE {table_name}
             SET {', '.join(new_keys)}
         WHERE {' AND '.join(keys)}
+        RETURNING *;
         """
 
-        # print(formatted, values)
-        return await self.connection.execute(formatted, *values)
+        return await self.connection.fetch(formatted, *values)
+
+    async def delete_data(self, table_name: str, data: dict) -> list:
+        """Delete records from table.
+
+        Parameters:
+            table_name (str): Table name.
+            data (dict): Keys and operators.
+                Example:
+                    {"id": 5} (Will find records that has id 5.)
+                    {"id": 5, "__id__": ">"} (Will find records that has id bigger that 5)
+
+        Returns:
+            list: One or more result.
+        """
+
+        raise_error(table_name, "table_name", str)
+        raise_error(data, "data", dict)
+
+        keys, values, _ = parse_data(data)
+
+        formatted = f"""
+        DELETE FROM {table_name}
+            WHERE {' AND '.join(keys)}
+        RETURNING *;
+        """
+
+        return await self.connection.fetch(formatted, *values)
 
     async def drop_table(self, table_name: str) -> str:
         """Drop a table.
