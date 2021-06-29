@@ -8,12 +8,15 @@ classifiers = [
     'Programming Language :: Python :: 3'
 ]
 
+with open('README.md', "r", encoding="utf-8") as f:
+    project_description = f.read()
+
 setup(
     name='postgrey',
     version='0.0.1',
     description='🐘 Simple, Fast, Async & ORM PostgreSQL database client based on Asyncpg for Python.',
     long_description_content_type="text/markdown",
-    long_description=open('README.md').read(),
+    long_description=project_description,
     url='https://github.com/5elenay/postgrey/',
     author='5elenay',
     author_email='',
