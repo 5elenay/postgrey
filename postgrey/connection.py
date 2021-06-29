@@ -208,6 +208,20 @@ class Postgrey:
 
         return await self.connection.fetch(formatted, *values)
 
+    async def fetch_all_data(self, table_name: str) -> list:
+        """Find all records from table.
+
+        Parameters:
+            table_name (str): Table name.
+
+        Returns:
+            list: All the records on the table.
+        """
+
+        raise_error(table_name, "table_name", str)
+
+        return await self.connection.fetch(f"SELECT * FROM {table_name}")
+
     async def drop_table(self, table_name: str) -> str:
         """Drop a table.
 
