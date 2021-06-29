@@ -8,6 +8,7 @@ class Postgrey:
     def __init__(self, dns: str = None, **kwargs) -> None:
         self.dns = quote(dns) if dns is not None else None
         self.connection_settings = kwargs or {}
+        self.connection = None
 
     async def connect(self):
         """Start the connection.
@@ -44,6 +45,29 @@ class Postgrey:
 
         return await self.connection.execute(query, *args, timeout=timeout)
 
+    async def fetch(self, query: Union[str, tuple], *args, timeout: Union[float, int] = None) -> str:
+        """Execute SQL command anf fetch the result.
+
+        Parameters:
+            query (str, tuple): SQL.
+            *args: Parameters if you added.
+            timeout (float, int): Timeout Value.
+
+        Returns:
+            list: One or more record.
+        """
+
+        raise_error(query, "query", (str, tuple))
+
+        if timeout is not None:
+            raise_error(timeout, "timeout", (int, float))
+            timeout = float(timeout)
+
+        if isinstance(query, tuple):
+            query = " ".join(str(i) for i in query)
+
+        return await self.connection.fetch(query, *args, timeout=timeout)
+
     async def create_table(self, table_name: str, columns: dict) -> str:
         """Create a new table.
 
@@ -76,7 +100,7 @@ class Postgrey:
 
         Parameters:
             table_name (str): Table name.
-            *args (dict): key - value dict
+            *args (dict, tuple, list): key - value dict or key list, tuple
 
         Returns:
             list: One or more result.
@@ -87,11 +111,12 @@ class Postgrey:
         keys, count, formatted = [], 1, ""
 
         for arg in args:
-            raise_error(arg, "arg", dict)
-            keys.extend(list(arg.values()))
+            raise_error(arg, "arg", (dict, tuple, list))
+            arg_keys = list(arg.values()) if isinstance(arg, dict) else arg
+            keys.extend(arg_keys)
 
             formatted += "("
-            for _ in arg.values():
+            for _ in arg_keys:
                 formatted += f"${count},"
                 count += 1
 
@@ -117,6 +142,7 @@ class Postgrey:
                 Example:
                     {"id": 5} (Will find records that has id 5.)
                     {"id": 5, "__id__": ">"} (Will find records that has id bigger that 5)
+            limit (int): Maximum record limit. [Optional.]
 
         Returns:
             list: One or more result.
@@ -208,7 +234,7 @@ class Postgrey:
 
         return await self.connection.fetch(formatted, *values)
 
-    async def fetch_all_data(self, table_name: str) -> list:
+    async def find_all_data(self, table_name: str, limit: Union[int, None] = None) -> list:
         """Find all records from table.
 
         Parameters:
@@ -219,8 +245,9 @@ class Postgrey:
         """
 
         raise_error(table_name, "table_name", str)
+        raise_error(limit, "limit", (int, type(None)))
 
-        return await self.connection.fetch(f"SELECT * FROM {table_name}")
+        return await self.connection.fetch(f"SELECT * FROM {table_name} {f'LIMIT {limit}' if limit is not None else ''}")
 
     async def drop_table(self, table_name: str) -> str:
         """Drop a table.
